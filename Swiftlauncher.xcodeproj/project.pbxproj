@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -14,6 +14,7 @@
 		4703E6FA2EBA5C9700F484D4 /* SwiftlauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4703E6F92EBA5C9700F484D4 /* SwiftlauncherTests.swift */; };
 		4703E7042EBA5C9700F484D4 /* SwiftlauncherUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4703E7032EBA5C9700F484D4 /* SwiftlauncherUITests.swift */; };
 		4703E7062EBA5C9700F484D4 /* SwiftlauncherUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4703E7052EBA5C9700F484D4 /* SwiftlauncherUITestsLaunchTests.swift */; };
+		474F4B6D2EBA641800BC075A /* HotKey in Frameworks */ = {isa = PBXBuildFile; productRef = 474F4B6C2EBA641800BC075A /* HotKey */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -45,6 +46,7 @@
 		4703E6FF2EBA5C9700F484D4 /* SwiftlauncherUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SwiftlauncherUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4703E7032EBA5C9700F484D4 /* SwiftlauncherUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftlauncherUITests.swift; sourceTree = "<group>"; };
 		4703E7052EBA5C9700F484D4 /* SwiftlauncherUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftlauncherUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		474F4B6E2EBAFBE100BC075A /* Swiftlauncher.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Swiftlauncher.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,6 +54,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				474F4B6D2EBA641800BC075A /* HotKey in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,6 +78,7 @@
 		4703E6DB2EBA5C9400F484D4 = {
 			isa = PBXGroup;
 			children = (
+				474F4B6E2EBAFBE100BC075A /* Swiftlauncher.entitlements */,
 				4703E6E62EBA5C9400F484D4 /* Swiftlauncher */,
 				4703E6F82EBA5C9700F484D4 /* SwiftlauncherTests */,
 				4703E7022EBA5C9700F484D4 /* SwiftlauncherUITests */,
@@ -145,6 +149,9 @@
 			dependencies = (
 			);
 			name = Swiftlauncher;
+			packageProductDependencies = (
+				474F4B6C2EBA641800BC075A /* HotKey */,
+			);
 			productName = Swiftlauncher;
 			productReference = 4703E6E42EBA5C9400F484D4 /* Swiftlauncher.app */;
 			productType = "com.apple.product-type.application";
@@ -217,6 +224,9 @@
 				Base,
 			);
 			mainGroup = 4703E6DB2EBA5C9400F484D4;
+			packageReferences = (
+				474F4B6B2EBA641800BC075A /* XCLocalSwiftPackageReference "HotKey" */,
+			);
 			productRefGroup = 4703E6E52EBA5C9400F484D4 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -421,12 +431,15 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Swiftlauncher/Swiftlauncher.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Swiftlauncher/Preview Content\"";
+				DEVELOPMENT_TEAM = J559NK7K73;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "需要发送按键事件以获取选中文本";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -446,12 +459,15 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Swiftlauncher/Swiftlauncher.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Swiftlauncher/Preview Content\"";
+				DEVELOPMENT_TEAM = J559NK7K73;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "需要发送按键事件以获取选中文本";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -573,6 +589,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		474F4B6B2EBA641800BC075A /* XCLocalSwiftPackageReference "HotKey" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = HotKey;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		474F4B6C2EBA641800BC075A /* HotKey */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HotKey;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 4703E6DC2EBA5C9400F484D4 /* Project object */;
 }
