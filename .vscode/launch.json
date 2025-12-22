@@ -1,0 +1,12 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Swiftlauncher",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "open build/Build/Products/Release/Swiftlauncher.app",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

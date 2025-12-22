@@ -34,7 +34,7 @@ func getKeychainValue(service: String) -> String? {
 let appKey = getKeychainValue(service: "YOUDAO_APP_KEY") ?? ""
 let appSecret = getKeychainValue(service: "YOUDAO_APP_SECRET") ?? ""
 let apiKey = getKeychainValue(service: "DASHSCOPE_API_KEY") ?? ""
-
+let launcherToast = ToastPanel()
 func getSelectedText() -> String? {
     let systemWideElement = AXUIElementCreateSystemWide()
     
@@ -149,11 +149,113 @@ func generateSign(q: String, salt: Int) -> String {
     return digest.map { String(format: "%02hhx", $0) }.joined().uppercased()
 }
 
+// MARK: - 移动窗口
+func moveActiveWindow(direction: String) {
+    // 获取当前激活的应用
+    let workspace = NSWorkspace.shared
+    guard let activeApp = workspace.frontmostApplication else { return }
+    
+    // 使用 Accessibility API 获取窗口
+    let app = AXUIElementCreateApplication(activeApp.processIdentifier)
+    var windowRef: CFTypeRef?
+    
+    // 获取焦点窗口
+    AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowRef)
+    
+    guard let window = windowRef else { return }
+    
+    // 获取屏幕尺寸
+    guard let screen = NSScreen.main else { return }
+    let screenFrame = screen.visibleFrame
+    
+    var newPosition: CGPoint!
+    switch direction {
+    case "left":
+        newPosition = CGPoint(
+            x: screenFrame.origin.x,
+            y: screenFrame.origin.y
+        )
+    case "right":
+        newPosition = CGPoint(
+            x: screenFrame.origin.x + screenFrame.width / 2,
+            y: screenFrame.origin.y
+        )
+    default:
+        return
+    }
+    
+    let newSize = CGSize(
+        width: screenFrame.width / 2,
+        height: screenFrame.height
+    )
+    // 设置窗口位置
+    var positionValue = newPosition
+    let positionRef = AXValueCreate(.cgPoint, &positionValue)!
+    AXUIElementSetAttributeValue(window as! AXUIElement,
+                                 kAXPositionAttribute as CFString,
+                                 positionRef)
+    
+    // 设置窗口大小
+    var sizeValue = newSize
+    let sizeRef = AXValueCreate(.cgSize, &sizeValue)!
+    AXUIElementSetAttributeValue(window as! AXUIElement,
+                                 kAXSizeAttribute as CFString,
+                                 sizeRef)
+}
+
+
+// MARK: - 搜索
+func spotlightSearch(_ query: String) -> [String] {
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/usr/bin/mdfind")
+    task.arguments = [query]
+    
+    let pipe = Pipe()
+    task.standardOutput = pipe
+    
+    do { try task.run() } catch {
+        return []
+    }
+    
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    let output = String(data: data, encoding: .utf8) ?? ""
+    return output.split(separator: "\n").map(String.init)
+}
+// MARK: - 命令回调
+func handleLauncherCommand(_ cmd: String) {
+    let lower = cmd.lowercased()
+    
+    if lower == "left" || lower == "right" {
+        moveActiveWindow(direction: lower)
+        return
+    }
+    // 其他情况 -> mdfind 搜索
+    DispatchQueue.global().async {
+        let results = spotlightSearch(cmd)
+        
+        DispatchQueue.main.async {
+            let text =
+            results.isEmpty ? "无搜索结果" : results.joined(separator: "\n")
+            
+            launcherToast.show(mode: .result,message: text)
+        }
+    }
+}
+func requestAXPermission() {
+    let opts: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString: true]
+    let trusted = AXIsProcessTrustedWithOptions(opts)
+    print("AX trusted? \(trusted)")
+}
 // MARK: - App Entry
 @main
 struct SwiftlauncherApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-
+    
+    init() {
+        requestAXPermission()
+        print("OK!!requestAXPermission")
+    }
+    
     var body: some Scene {
         // 不显示任何窗口
         Settings {} // 空 Scene，用于 Settings 面板，如果不需要可以留空
@@ -166,6 +268,7 @@ struct SwiftlauncherApp: App {
 class HotKeyManager: ObservableObject {
     private var hotKey: HotKey?
     private var hotKeyQwen: HotKey?
+    private var launcherHotKey: HotKey?
     private var volumeUpHotKey: HotKey?
     private var volumeDownHotKey: HotKey?
     // MARK: - setupHotKey
@@ -179,7 +282,15 @@ class HotKeyManager: ObservableObject {
         hotKey = HotKey(key: .t, modifiers: [.command])
         hotKey?.keyDownHandler = { [weak self] in
             guard let self = self else { return }
-            self.handleHotKey()
+//            self.handleHotKeyTranslate()
+            let workspace = NSWorkspace.shared
+                        if workspace.frontmostApplication?.bundleIdentifier == "net.sourceforge.skim-app.skim" {
+                            // 当前是 Skim，执行自定义方法
+                            self.handleHotKeyTranslate()
+                        } else {
+                            // 其他应用 → 模拟发送 ⌘T 给前台应用
+                            self.sendCommandTToFrontmostApp()
+                        }
         }
         // 注册全局热键  ⌘ + option + T 触发 qwen
         hotKeyQwen = HotKey(key: .t, modifiers: [.command, .option])
@@ -190,6 +301,16 @@ class HotKeyManager: ObservableObject {
             dashscopeChatCompletion(userText: selectedText) { result in
                 self.showTranslationToast(result)
             }
+        }
+        // ⌥ + Space 呼出输入框
+        launcherHotKey = HotKey(key: .space, modifiers: [.option])
+        launcherHotKey?.keyDownHandler = {
+            // 输入模式，清空并弹出
+            launcherToast.onSubmit = { text in
+                // 交给你现有的命令处理函数
+                handleLauncherCommand(text)
+            }
+            launcherToast.show(mode: .input, message: "")
         }
         // 2️⃣ 音量增加 ⌘ + Option + ↑
         volumeUpHotKey = HotKey(key: .upArrow, modifiers: [.option])
@@ -206,7 +327,7 @@ class HotKeyManager: ObservableObject {
         
     }
     
-    private func handleHotKey() {
+    private func handleHotKeyTranslate() {
         guard let selectedText = getSelectedText(), !selectedText.isEmpty else {
             //            showNotification(title: "翻译", body: "请先选中文本")
             return
@@ -214,7 +335,7 @@ class HotKeyManager: ObservableObject {
         
         // 调用翻译(只显示最终结果)
         translate(text: selectedText) { result in
-//            showNotification(title: "翻译", body: result)
+            //            showNotification(title: "翻译", body: result)
             self.showTranslationToast(result)
         }
     }
@@ -253,131 +374,56 @@ class HotKeyManager: ObservableObject {
     }
     private func showTranslationToast(_ text: String) {
         DispatchQueue.main.async {
-            let toast = ToastWindow(message: text)
-            toast.show()
+            launcherToast.show(mode: .result, message: text)
         }
+    }
+    private func sendCommandTToFrontmostApp() {
+        guard AXIsProcessTrusted(),
+              let frontmostApp = NSWorkspace.shared.frontmostApplication,
+              let source = CGEventSource(stateID: .hidSystemState),
+              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 17, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 17, keyDown: false) else {
+            return
+        }
+        
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        
+        keyDown.postToPid(frontmostApp.processIdentifier)
+        keyUp.postToPid(frontmostApp.processIdentifier)
     }
 }
 
-import Cocoa
-// MARK: - 窗口类
-class ToastWindow: NSWindow {
-    private static var globalClickMonitor: Any?
-    private static var activeToasts: Set<ToastWindow> = []
-    private static let lock = NSLock()
-    
-    init(message: String) {
-        let screenRect = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 400, height: 100)
-        let width: CGFloat = 600
-        let height: CGFloat = 240
-        let rect = NSRect(
-            x: (screenRect.width - width) / 2,
-            y: screenRect.height - height - 100,
-            width: width,
-            height: height
-        )
-        super.init(
-            contentRect: rect,
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        
-        self.isOpaque = false
-        self.backgroundColor = .clear
-        self.hasShadow = true
-        self.level = .floating
-        self.isReleasedWhenClosed = false
-        self.collectionBehavior = [.transient, .ignoresCycle]
-        
-        // 使用硬件加速的 layer-backed view
-        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        containerView.wantsLayer = true
-        containerView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.8).cgColor
-        containerView.layer?.cornerRadius = 10
-        
-        // 使用 NSTextField 但优化配置
-        let label = NSTextField(labelWithString: message)
-        label.frame = NSRect(x: 20, y: 20, width: width - 40, height: height - 40)
-        label.textColor = .white
-        label.font = NSFont.systemFont(ofSize: 22, weight: .medium)
-        label.alignment = .left
-        label.isBezeled = false
-        label.drawsBackground = false
-        label.isEditable = false
-        label.isSelectable = true
-        label.lineBreakMode = .byWordWrapping   // 按单词换行
-        label.usesSingleLineMode = false        // 允许多行
-        label.maximumNumberOfLines = 0          // 不限制行数
-        containerView.addSubview(label)
-        
-        self.contentView = containerView
-    }
-    
-    func show() {
-        Self.lock.lock()
-        Self.activeToasts.insert(self)
-        
-        // 只在第一个 toast 时创建全局监听器
-        if Self.globalClickMonitor == nil {
-            Self.setupGlobalMonitor()
-        }
-        Self.lock.unlock()
-        
-        self.orderFront(nil)
-    }
-    
-    private static func setupGlobalMonitor() {
-        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { _ in
-            let mouseLocation = NSEvent.mouseLocation
-            
-            Self.lock.lock()
-            let toastsToClose = Self.activeToasts.filter { !$0.frame.contains(mouseLocation) && $0.isVisible }
-            Self.lock.unlock()
-            
-            // 批量关闭
-            toastsToClose.forEach { $0.close() }
-        }
-    }
-    
-    override func close() {
-        Self.lock.lock()
-        Self.activeToasts.remove(self)
-        
-        // 如果没有活动的 toast 了，移除全局监听器
-        if Self.activeToasts.isEmpty, let monitor = Self.globalClickMonitor {
-            NSEvent.removeMonitor(monitor)
-            Self.globalClickMonitor = nil
-        }
-        Self.lock.unlock()
-        
-        super.close()
-    }
-}
+
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     
     var statusItem: NSStatusItem?
     var hotKeyManager: HotKeyManager?
-
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 设置应用为“辅助”类型，不显示 Dock 图标
-            NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(.accessory)
         // 创建状态栏图标
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
             button.image = NSImage(systemSymbolName: "arrow.up.left.and.arrow.down.right", accessibilityDescription: "WindowManager")
         }
-
+        
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
         statusItem?.menu = menu
-
+        
         // 初始化 HotKeyManager
         hotKeyManager = HotKeyManager()
         hotKeyManager?.setupHotKey()
     }
-
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // 关键:应用启动时设置为 prohibited,防止抢焦点
+        NSApp.setActivationPolicy(.prohibited)
+    }
+    
+    
     @objc func quit() {
         NSApp.terminate(nil)
     }
