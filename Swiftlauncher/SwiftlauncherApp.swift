@@ -14,8 +14,7 @@ func getKeychainValue(service: String) -> String? {
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: service,
         kSecReturnData as String: true,
-        kSecMatchLimit as String: kSecMatchLimitOne,
-        kSecAttrAccessGroup as String: "start4.com.yourcompany.yourapp"
+        kSecMatchLimit as String: kSecMatchLimitOne
     ]
     
     var item: CFTypeRef?
@@ -29,8 +28,6 @@ func getKeychainValue(service: String) -> String? {
         return nil
     }
 }
-//let appKey = ProcessInfo.processInfo.environment["YOUDAO_APP_KEY"] ?? ""
-//let appSecret = ProcessInfo.processInfo.environment["YOUDAO_APP_SECRET"] ?? ""
 let appKey = getKeychainValue(service: "YOUDAO_APP_KEY") ?? ""
 let appSecret = getKeychainValue(service: "YOUDAO_APP_SECRET") ?? ""
 let apiKey = getKeychainValue(service: "DASHSCOPE_API_KEY") ?? ""
@@ -271,6 +268,7 @@ class HotKeyManager: ObservableObject {
     private var launcherHotKey: HotKey?
     private var volumeUpHotKey: HotKey?
     private var volumeDownHotKey: HotKey?
+    private var alacrittyHotKey: HotKey?
     // MARK: - setupHotKey
     func setupHotKey() {
         // 请求通知权限
@@ -311,6 +309,28 @@ class HotKeyManager: ObservableObject {
                 handleLauncherCommand(text)
             }
             launcherToast.show(mode: .input, message: "")
+        }
+        alacrittyHotKey = HotKey(key: .return, modifiers: [.command])
+        alacrittyHotKey?.keyDownHandler = {
+            print("Command + Enter triggered: Opening Alacritty")
+            
+            // 优先尝试通过路径直接打开，因为你已经确认了路径
+            let appUrl = URL(fileURLWithPath: "/Applications/Alacritty.app")
+            let config = NSWorkspace.OpenConfiguration()
+            
+            // 激活应用并将其带到前台
+            config.activates = true
+            
+            NSWorkspace.shared.openApplication(at: appUrl, configuration: config) { (app, error) in
+                if let error = error {
+                    print("无法启动 Alacritty: \(error.localizedDescription)")
+                    
+                    // 备选方案：如果路径失败，尝试通过 Bundle ID 查找
+                    if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "org.alacritty") {
+                        NSWorkspace.shared.openApplication(at: url, configuration: config, completionHandler: nil)
+                    }
+                }
+            }
         }
         // 2️⃣ 音量增加 ⌘ + Option + ↑
         volumeUpHotKey = HotKey(key: .upArrow, modifiers: [.option])
@@ -422,7 +442,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 关键:应用启动时设置为 prohibited,防止抢焦点
         NSApp.setActivationPolicy(.prohibited)
     }
-    
     
     @objc func quit() {
         NSApp.terminate(nil)
