@@ -32,7 +32,7 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
     private var globalClickMonitor: Any?
     
     // MARK: - 初始化
-    init(width: CGFloat = 600, height: CGFloat = 120) {
+    init(width: CGFloat = 1000, height: CGFloat = 220) {
         let screenRect = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let rect = NSRect(
             x: (screenRect.width - width) / 2,

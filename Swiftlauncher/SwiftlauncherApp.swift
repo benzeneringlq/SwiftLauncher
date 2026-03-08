@@ -165,26 +165,30 @@ func moveActiveWindow(direction: String) {
     guard let screen = NSScreen.main else { return }
     let screenFrame = screen.visibleFrame
     
-    var newPosition: CGPoint!
-    switch direction {
-    case "left":
-        newPosition = CGPoint(
-            x: screenFrame.origin.x,
-            y: screenFrame.origin.y
-        )
-    case "right":
-        newPosition = CGPoint(
-            x: screenFrame.origin.x + screenFrame.width / 2,
-            y: screenFrame.origin.y
-        )
-    default:
-        return
-    }
+// 直接初始化为全屏状态
+var newFrame = screenFrame
+
+switch direction {
+case "l":
+    newFrame.size.width /= 2
+case "r":
+    newFrame.origin.x += screenFrame.width / 2
+    newFrame.size.width /= 2
+case "u":
+    newFrame.size.height /= 2
+case "d":
+    newFrame.origin.y += screenFrame.height / 2
+    newFrame.size.height /= 2
+case "f":
+    break // 保持全屏
+default:
+    return
+}
+
+// 最后如果需要赋值回变量
+let newPosition = newFrame.origin
+let newSize = newFrame.size
     
-    let newSize = CGSize(
-        width: screenFrame.width / 2,
-        height: screenFrame.height
-    )
     // 设置窗口位置
     var positionValue = newPosition
     let positionRef = AXValueCreate(.cgPoint, &positionValue)!
@@ -222,21 +226,21 @@ func spotlightSearch(_ query: String) -> [String] {
 func handleLauncherCommand(_ cmd: String) {
     let lower = cmd.lowercased()
     
-    if lower == "left" || lower == "right" {
+    if lower == "l" || lower == "r"||lower == "f" || lower == "d" || lower == "u" {
         moveActiveWindow(direction: lower)
         return
     }
     // 其他情况 -> mdfind 搜索
-    DispatchQueue.global().async {
-        let results = spotlightSearch(cmd)
+    // DispatchQueue.global().async {
+    //     let results = spotlightSearch(cmd)
         
-        DispatchQueue.main.async {
-            let text =
-            results.isEmpty ? "无搜索结果" : results.joined(separator: "\n")
+    //     DispatchQueue.main.async {
+    //         let text =
+    //         results.isEmpty ? "无搜索结果" : results.joined(separator: "\n")
             
-            launcherToast.show(mode: .result,message: text)
-        }
-    }
+    //         launcherToast.show(mode: .result,message: text)
+    //     }
+    // }
 }
 func requestAXPermission() {
     let opts: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString: true]
