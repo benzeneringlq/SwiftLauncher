@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		4703E6E82EBA5C9400F484D4 /* SwiftlauncherApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4703E6E72EBA5C9400F484D4 /* SwiftlauncherApp.swift */; };
+		47BA4DB02EE1F16A009CA6EA /* IPC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47BA4DB12EE1F16A009CA6EA /* IPC.swift */; };
 		4703E6EC2EBA5C9600F484D4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4703E6EB2EBA5C9600F484D4 /* Assets.xcassets */; };
 		4703E6EF2EBA5C9600F484D4 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4703E6EE2EBA5C9600F484D4 /* Preview Assets.xcassets */; };
 		4703E6FA2EBA5C9700F484D4 /* SwiftlauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4703E6F92EBA5C9700F484D4 /* SwiftlauncherTests.swift */; };
@@ -50,6 +51,7 @@
 		474F4B6E2EBAFBE100BC075A /* Swiftlauncher.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Swiftlauncher.entitlements; sourceTree = "<group>"; };
 		47BA4DAC2EE1E26D009CA6EA /* ToastPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastPanel.swift; sourceTree = "<group>"; };
 		47BA4DAE2EE1F16A009CA6EA /* ToastWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastWindow.swift; sourceTree = "<group>"; };
+		47BA4DB12EE1F16A009CA6EA /* IPC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPC.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +111,7 @@
 				4703E6ED2EBA5C9600F484D4 /* Preview Content */,
 				47BA4DAC2EE1E26D009CA6EA /* ToastPanel.swift */,
 				47BA4DAE2EE1F16A009CA6EA /* ToastWindow.swift */,
+				47BA4DB12EE1F16A009CA6EA /* IPC.swift */,
 			);
 			path = Swiftlauncher;
 			sourceTree = "<group>";
@@ -277,6 +280,7 @@
 				47BA4DAF2EE1F16A009CA6EA /* ToastWindow.swift in Sources */,
 				4703E6E82EBA5C9400F484D4 /* SwiftlauncherApp.swift in Sources */,
 				47BA4DAD2EE1E26D009CA6EA /* ToastPanel.swift in Sources */,
+				47BA4DB02EE1F16A009CA6EA /* IPC.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

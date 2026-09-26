@@ -29,9 +29,21 @@
             ]
         },
         {
+            "label": "Build swiftlauncher-cli",
+            "type": "shell",
+            "command": "swiftc",
+            "args": [
+                "-O",
+                "SwiftlauncherCLI.swift",
+                "-o",
+                "build/Build/Products/Release/swiftlauncher-cli"
+            ],
+            "problemMatcher": ["$swiftc"]
+        },
+        {
             "label": "Run Swiftlauncher (Release)",
             "type": "shell",
-            "dependsOn": "Build Swiftlauncher (Release)",
+            "dependsOn": "Install swiftlauncher-cli into app",
             "command": "open",
             "args": [
                 "build/Build/Products/Release/Swiftlauncher.app"
@@ -45,7 +57,7 @@
         {
             "label": "Install Swiftlauncher to /Applications",
             "type": "shell",
-            "dependsOn": "Build Swiftlauncher (Release)",
+            "dependsOn": "Install swiftlauncher-cli into app",
             "command": "cp",
             "args": [
                 "-R",
@@ -58,6 +70,17 @@
                 "reveal": "always",
                 "panel": "shared"
             },
+            "problemMatcher": []
+        },
+        {
+            "label": "Install swiftlauncher-cli into app",
+            "type": "shell",
+            "dependsOn": ["Build Swiftlauncher (Release)", "Build swiftlauncher-cli"],
+            "command": "/bin/sh",
+            "args": [
+                "-c",
+                "cp build/Build/Products/Release/swiftlauncher-cli build/Build/Products/Release/Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli && codesign --force --sign - build/Build/Products/Release/Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli && codesign --force --sign - build/Build/Products/Release/Swiftlauncher.app"
+            ],
             "problemMatcher": []
         }
     ]

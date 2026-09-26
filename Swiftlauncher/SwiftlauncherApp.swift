@@ -363,6 +363,14 @@ class HotKeyManager: ObservableObject {
             self.showTranslationToast(result)
         }
     }
+
+    func translateReceivedText(_ text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        translate(text: text) { [weak self] result in
+            self?.showTranslationToast(result)
+        }
+    }
     // MARK: - 翻译
     private func translate(text: String, from: String = "auto", to: String = "zh-CHS", completion: @escaping (String) -> Void) {
         guard !appKey.isEmpty && !appSecret.isEmpty else {
@@ -424,6 +432,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     var statusItem: NSStatusItem?
     var hotKeyManager: HotKeyManager?
+    private var ipcServer: SwiftlauncherIPCServer?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 设置应用为“辅助”类型，不显示 Dock 图标
@@ -441,6 +450,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 初始化 HotKeyManager
         hotKeyManager = HotKeyManager()
         hotKeyManager?.setupHotKey()
+        ipcServer = SwiftlauncherIPCServer { [weak self] text in
+            self?.hotKeyManager?.translateReceivedText(text)
+        }
+        ipcServer?.start()
     }
     func applicationWillFinishLaunching(_ notification: Notification) {
         // 关键:应用启动时设置为 prohibited,防止抢焦点
