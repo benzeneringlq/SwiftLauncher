@@ -31,12 +31,10 @@
         {
             "label": "Build swiftlauncher-cli",
             "type": "shell",
-            "command": "swiftc",
+            "command": "/bin/sh",
             "args": [
-                "-O",
-                "SwiftlauncherCLI.swift",
-                "-o",
-                "build/Build/Products/Release/swiftlauncher-cli"
+                "-c",
+                "mkdir -p build/Build/Products/Release && swiftc -O SwiftlauncherCLI.swift -o build/Build/Products/Release/swiftlauncher-cli"
             ],
             "problemMatcher": ["$swiftc"]
         },
@@ -55,7 +53,7 @@
             }
         },
         {
-            "label": "Install Swiftlauncher to /Applications",
+            "label": "Install Swiftlauncher to ~/Applications",
             "type": "shell",
             "dependsOn": "Install swiftlauncher-cli into app",
             "command": "cp",
@@ -63,7 +61,7 @@
                 "-R",
                 "-f",
                 "build/Build/Products/Release/Swiftlauncher.app",
-                "/Users/liuming/Applications/"
+                "${env:HOME}/Applications/"
             ],
             "presentation": {
                 "echo": true,
@@ -76,6 +74,7 @@
             "label": "Install swiftlauncher-cli into app",
             "type": "shell",
             "dependsOn": ["Build Swiftlauncher (Release)", "Build swiftlauncher-cli"],
+            "dependsOrder": "sequence",
             "command": "/bin/sh",
             "args": [
                 "-c",

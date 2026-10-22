@@ -6,7 +6,8 @@
             "type": "node-terminal",
             "request": "launch",
             "command": "open build/Build/Products/Release/Swiftlauncher.app",
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Install swiftlauncher-cli into app"
         }
     ]
 }

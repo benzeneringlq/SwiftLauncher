@@ -230,17 +230,12 @@ func handleLauncherCommand(_ cmd: String) {
         moveActiveWindow(direction: lower)
         return
     }
-    // 其他情况 -> mdfind 搜索
-    // DispatchQueue.global().async {
-    //     let results = spotlightSearch(cmd)
-        
-    //     DispatchQueue.main.async {
-    //         let text =
-    //         results.isEmpty ? "无搜索结果" : results.joined(separator: "\n")
-            
-    //         launcherToast.show(mode: .result,message: text)
-    //     }
-    // }
+    // 其他情况 -> 通过登录 shell 执行(sioyek、code ~/... 等)
+    LauncherRunner.run(cmd) { message in
+        DispatchQueue.main.async {
+            launcherToast.show(mode: .result, message: message)
+        }
+    }
 }
 func requestAXPermission() {
     let opts: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString: true]
@@ -450,6 +445,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 初始化 HotKeyManager
         hotKeyManager = HotKeyManager()
         hotKeyManager?.setupHotKey()
+        LauncherEnvironment.shared.preload()
         ipcServer = SwiftlauncherIPCServer { [weak self] text in
             self?.hotKeyManager?.translateReceivedText(text)
         }
