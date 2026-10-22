@@ -85,9 +85,9 @@
 
 `ToastPanel.controlTextDidChange` 每次输入变化调用补全（输入法有 marked text 时跳过）：
 
-- 唯一候选：在输入框后显示灰色 ghost 后缀；
-- 多个候选：显示候选列表，并用公共前缀作为 ghost；
-- `Tab` / `Shift-Tab` / 上下方向键在候选中循环；
+- 唯一候选：在输入框后显示灰色 ghost 后缀（只显示剩余部分）；
+- 多个候选：显示候选列表（最多 8 行）；仅当公共前缀比当前输入更长时，才把剩余部分作为 ghost；
+- `Tab` / `Shift-Tab` / 上下方向键在可见候选（最多 8 个）中循环；
 - `Enter`：若只有一个候选且 ghost 可见，先接受补全再提交；否则提交当前原始文本；
 - `Esc` 关闭。
 
@@ -139,13 +139,13 @@ fish 版本: 4.5.0
 
 1. 输入 `code ` 后，`controlTextDidChange` 调用补全。
 2. `parse` 识别出第一个 token `code` 是命令位置。
-3. `commandNames(matching: "code")` 在缓存的可执行文件中过滤，找到 `/usr/local/bin/code`（指向 VS Code 的 CLI）。
+3. `commandNames(matching: "code")` 在缓存的 PATH 可执行文件名中过滤，返回名字 `code`（例如扫描自 `/usr/local/bin/code`，指向 VS Code 的 CLI）。
 4. 空格后输入 `~/projects`，进入路径补全：
    - 拆成 `dirPart = "~/"`、`namePrefix = "projects"`；
    - `~/` 展开为 home；
    - 列出 home，过滤以 `projects` 开头的名字；
    - 若 `~/projects` 是目录，候选为 `~/projects/`（补斜杠）。
-5. 唯一候选时显示 ghost `~/projects/`；若有多个（如 `projects-old`），显示列表，Tab 切换。
+5. 唯一候选时输入框后只显示剩余后缀 ghost `/`（完整候选为 `~/projects/`）；若有多个（如 `projects-old`），显示列表，Tab 切换。
 6. 按 Enter：
    - 唯一候选：接受补全，提交 `code ~/projects/`；
    - 多候选：直接提交当前文本 `code ~/projects`。
@@ -193,11 +193,11 @@ fish 版本: 4.5.0
 
 ## 9. 代码索引
 
-- 环境检测/加载：`CommandLauncher.swift:15-121`
+- 环境检测/加载：`CommandLauncher.swift:15-122`
 - Token 解析与补全：`CommandLauncher.swift:125-296`
 - 命令执行：`CommandLauncher.swift:299-420`
-- 输入框补全状态与 Enter 处理：`ToastPanel.swift:377-396`
+- 输入框补全状态与 Enter 处理：`ToastPanel.swift:377-427`
 - 启动时预加载：`SwiftlauncherApp.swift:448`
-- 命令分发：`SwiftlauncherApp.swift:226-233`
+- 命令分发：`SwiftlauncherApp.swift:226-239`
 
 行号会随代码变化，仅作定位参考。
