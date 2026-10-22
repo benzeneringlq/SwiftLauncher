@@ -13,6 +13,8 @@
                 "-configuration",
                 "Release",
                 "-derivedDataPath",
+                "build",
+                "CODE_SIGNING_ALLOWED=NO",
                 "build"
             ],
             "group": {
@@ -78,7 +80,7 @@
             "command": "/bin/sh",
             "args": [
                 "-c",
-                "cp build/Build/Products/Release/swiftlauncher-cli build/Build/Products/Release/Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli && codesign --force --sign - build/Build/Products/Release/Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli && codesign --force --sign - build/Build/Products/Release/Swiftlauncher.app"
+                "cp build/Build/Products/Release/swiftlauncher-cli build/Build/Products/Release/Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli && IDENTITY=$(security find-identity -v -p codesigning | awk '/Swiftlauncher Local Signing/ && length($2)==40 {print $2; exit}') && { [ -n \"$IDENTITY\" ] || IDENTITY=$(security find-identity -v -p codesigning | awk 'length($2)==40 {print $2; exit}'); } && SIGN_ID=${IDENTITY:--} && codesign --force --sign \"$SIGN_ID\" build/Build/Products/Release/Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli && codesign --force --sign \"$SIGN_ID\" build/Build/Products/Release/Swiftlauncher.app"
             ],
             "problemMatcher": []
         }

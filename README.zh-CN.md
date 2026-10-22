@@ -88,7 +88,7 @@ xcodebuild \
 open build/Build/Products/Release/Swiftlauncher.app
 ```
 
-CLI 会被嵌入到 `Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli`；VS Code 的安装任务负责复制并 ad-hoc 签名。使用选中文本翻译和窗口平铺前，需要在“系统设置 → 隐私与安全性 → 辅助功能”中授予权限。
+CLI 会被嵌入到 `Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli`；VS Code 的安装任务负责复制并重新签名整个 bundle。任务优先使用本地 `Swiftlauncher Local Signing` 身份（login keychain 中的 10 年自签名证书），其次使用其他可用身份，没有可用身份时才回退到 ad-hoc 签名。稳定的签名身份可以让辅助功能授权在重新构建后继续有效。使用选中文本翻译和窗口平铺前，需要在“系统设置 → 隐私与安全性 → 辅助功能”中授予一次权限。
 
 ## 实现简述
 

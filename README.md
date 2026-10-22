@@ -88,7 +88,7 @@ xcodebuild \
 open build/Build/Products/Release/Swiftlauncher.app
 ```
 
-The CLI is embedded into `Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli`; the VS Code install task copies and ad-hoc signs it. For selected-text translation and window tiling, grant Accessibility permission in System Settings → Privacy & Security → Accessibility.
+The CLI is embedded into `Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli`; the VS Code install task copies it and re-signs the bundle. It prefers a local `Swiftlauncher Local Signing` identity (a 10-year self-signed certificate in the login keychain), then any other available identity, and falls back to ad-hoc signing. A stable identity keeps the Accessibility grant across rebuilds. For selected-text translation and window tiling, grant Accessibility permission in System Settings → Privacy & Security → Accessibility.
 
 ## How it works
 
