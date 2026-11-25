@@ -4,6 +4,8 @@
 <dict>
 	<key>NSAccessibilityUsageDescription</key>
 	<string>This app needs accessibility permission to move and resize windows.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>This app needs AppleEvents permission to read the current Finder folder path.</string>
 	<key>NSServices</key>
 	<array>
 		<dict/>

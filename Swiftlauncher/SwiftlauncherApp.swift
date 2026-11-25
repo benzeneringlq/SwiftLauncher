@@ -271,12 +271,61 @@ func spotlightSearch(_ query: String) -> [String] {
     let output = String(data: data, encoding: .utf8) ?? ""
     return output.split(separator: "\n").map(String.init)
 }
+// MARK: - 访达当前目录打开终端
+func openTerminalAtFinderDirectory() {
+    let script = """
+    tell application "Finder"
+        if (count of windows) > 0 then
+            POSIX path of (target of front window as alias)
+        else
+            POSIX path of (desktop as alias)
+        end if
+    end tell
+    """
+    var error: NSDictionary?
+    let targetPath: String
+    if let appleScript = NSAppleScript(source: script),
+       let result = appleScript.executeAndReturnError(&error).stringValue,
+       !result.isEmpty {
+        targetPath = result
+    } else {
+        targetPath = FileManager.default.homeDirectoryForCurrentUser.path
+    }
+
+    let appURL = URL(fileURLWithPath: "/Applications/Alacritty.app")
+    let resolvedURL = FileManager.default.fileExists(atPath: appURL.path)
+        ? appURL
+        : NSWorkspace.shared.urlForApplication(withBundleIdentifier: "org.alacritty")
+
+    if let terminalURL = resolvedURL {
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        config.createsNewApplicationInstance = true
+        config.arguments = ["--working-directory", targetPath]
+        NSWorkspace.shared.openApplication(at: terminalURL, configuration: config) { _, err in
+            if let err {
+                DispatchQueue.main.async {
+                    launcherToast.show(mode: .result, message: "无法打开 Alacritty: \(err.localizedDescription)")
+                }
+            }
+        }
+    } else if let terminalApp = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") {
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.open([URL(fileURLWithPath: targetPath)], withApplicationAt: terminalApp, configuration: config, completionHandler: nil)
+    }
+}
+
 // MARK: - 命令回调
 func handleLauncherCommand(_ cmd: String) {
     let lower = cmd.lowercased()
     
     if lower == "l" || lower == "r"||lower == "f" || lower == "d" || lower == "u" {
         moveActiveWindow(direction: lower)
+        return
+    }
+    if lower == "term" || lower == "here" {
+        openTerminalAtFinderDirectory()
         return
     }
     // 其他情况 -> 通过登录 shell 执行(sioyek、code ~/... 等)
