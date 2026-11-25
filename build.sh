@@ -23,13 +23,42 @@ EOF
 }
 
 build_app() {
-    xcodebuild \
-        -project Swiftlauncher.xcodeproj \
-        -scheme Swiftlauncher \
-        -configuration Release \
-        -derivedDataPath build \
-        CODE_SIGNING_ALLOWED=NO \
-        build
+    if xcodebuild -version >/dev/null 2>&1; then
+        xcodebuild \
+            -project Swiftlauncher.xcodeproj \
+            -scheme Swiftlauncher \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+        return
+    fi
+
+    echo "xcodebuild unavailable; building with swiftc fallback..."
+    local obj_dir="build/swiftc-fallback"
+    mkdir -p "$obj_dir" "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
+
+    swiftc -O -emit-module -emit-library -static \
+        -module-name HotKey \
+        -emit-module-path "$obj_dir/HotKey.swiftmodule" \
+        -o "$obj_dir/libHotKey.a" \
+        HotKey/Sources/HotKey/*.swift
+
+    swiftc -O -parse-as-library \
+        -I "$obj_dir" -L "$obj_dir" -lHotKey \
+        -framework Carbon -framework AppKit -framework SwiftUI \
+        -framework UserNotifications -framework CryptoKit -framework Security \
+        -framework ApplicationServices -framework IOKit -framework Cocoa \
+        -o "$APP_BUNDLE/Contents/MacOS/Swiftlauncher" \
+        Swiftlauncher/CommandLauncher.swift \
+        Swiftlauncher/ToastPanel.swift \
+        Swiftlauncher/IPC.swift \
+        Swiftlauncher/SwiftlauncherApp.swift
+
+    local plist="$APP_BUNDLE/Contents/Info.plist"
+    if [[ -f "$plist" ]]; then
+        /usr/libexec/PlistBuddy -c "Add :NSAppleEventsUsageDescription string 'This app needs AppleEvents permission to read the current Finder folder path.'" "$plist" 2>/dev/null || true
+    fi
 }
 
 build_cli() {
