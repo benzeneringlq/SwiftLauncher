@@ -33,6 +33,11 @@ plist_set() {
 }
 
 build_app() {
+    if [[ ! -f "HotKey/Sources/HotKey/HotKey.swift" ]]; then
+        echo "Initializing HotKey submodule..."
+        git submodule update --init --recursive
+    fi
+
     mkdir -p "$OBJ_DIR" "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 
     swiftc -O -emit-module -emit-library -static \
@@ -63,6 +68,7 @@ build_app() {
     plist_set "$plist" "CFBundleShortVersionString" "string" "1.0"
     plist_set "$plist" "CFBundleVersion" "string" "1"
     plist_set "$plist" "LSMinimumSystemVersion" "string" "13.7"
+    plist_set "$plist" "LSUIElement" "bool" "true"
 
     printf 'APPL????' > "$APP_BUNDLE/Contents/PkgInfo"
 }
