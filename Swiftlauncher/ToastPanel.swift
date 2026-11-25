@@ -343,6 +343,38 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
             return
         }
 
+        if text == "kill" || text.hasPrefix("kill ") {
+            spotlightSearcher.cancel()
+            let keyword = text.hasPrefix("kill ") ? String(text.dropFirst(5)).trimmingCharacters(in: .whitespaces) : ""
+            let selfPid = ProcessInfo.processInfo.processIdentifier
+            let apps = NSWorkspace.shared.runningApplications.filter { app in
+                guard app.processIdentifier != selfPid else { return false }
+                let name = app.localizedName ?? app.executableURL?.lastPathComponent ?? ""
+                guard !name.isEmpty else { return false }
+                if keyword.isEmpty { return true }
+                return name.localizedCaseInsensitiveContains(keyword)
+                    || (app.bundleIdentifier?.localizedCaseInsensitiveContains(keyword) ?? false)
+            }
+            let sorted = apps.sorted { lhs, rhs in
+                if (lhs.activationPolicy == .regular) != (rhs.activationPolicy == .regular) {
+                    return lhs.activationPolicy == .regular
+                }
+                let lName = lhs.localizedName ?? lhs.executableURL?.lastPathComponent ?? ""
+                let rName = rhs.localizedName ?? rhs.executableURL?.lastPathComponent ?? ""
+                return lName.localizedCaseInsensitiveCompare(rName) == .orderedAscending
+            }
+            let items = sorted.map { app in
+                let name = app.localizedName ?? app.executableURL?.lastPathComponent ?? "Unknown"
+                return LauncherSuggestion(
+                    line: text,
+                    replacement: "\(name) (PID: \(app.processIdentifier))",
+                    action: .killProcess(app)
+                )
+            }
+            applyCompletions(items, showListForSingleItem: true, showGhost: false)
+            return
+        }
+
         spotlightSearcher.cancel()
         let items = LauncherCompleter.suggestions(for: text).filter { $0.line != text }
         applyCompletions(items)
