@@ -552,6 +552,10 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
             }
 
             var text = inputField.stringValue
+            if text.hasPrefix(" ") || text.hasPrefix("\u{00A0}") || text == "cb" || text.hasPrefix("cb ") || text == "kill" || text.hasPrefix("kill ") {
+                hide()
+                return true
+            }
             if completions.count == 1, !ghostLabel.isHidden {
                 text = completions[0].line
             }

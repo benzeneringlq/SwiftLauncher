@@ -495,6 +495,7 @@ final class SpotlightSearcher {
     private var query: NSMetadataQuery?
     private var observers: [NSObjectProtocol] = []
     private var onResults: (([URL]) -> Void)?
+    private var searchGeneration: Int = 0
     private let maxResults = 30
 
     deinit {
@@ -510,6 +511,8 @@ final class SpotlightSearcher {
             return
         }
 
+        searchGeneration += 1
+        let generation = searchGeneration
         self.onResults = onResults
 
         let metadataQuery = NSMetadataQuery()
@@ -522,14 +525,14 @@ final class SpotlightSearcher {
             object: metadataQuery,
             queue: .main
         ) { [weak self] _ in
-            self?.handleQueryUpdate(finished: true)
+            self?.handleQueryUpdate(finished: true, keyword: trimmed, generation: generation)
         }
         let updateObserver = center.addObserver(
             forName: .NSMetadataQueryDidUpdate,
             object: metadataQuery,
             queue: .main
         ) { [weak self] _ in
-            self?.handleQueryUpdate(finished: false)
+            self?.handleQueryUpdate(finished: false, keyword: trimmed, generation: generation)
         }
 
         observers = [finishObserver, updateObserver]
@@ -538,6 +541,7 @@ final class SpotlightSearcher {
     }
 
     func cancel() {
+        searchGeneration += 1
         for observer in observers {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -547,8 +551,8 @@ final class SpotlightSearcher {
         onResults = nil
     }
 
-    private func handleQueryUpdate(finished: Bool) {
-        guard let query else { return }
+    private func handleQueryUpdate(finished: Bool, keyword: String, generation: Int) {
+        guard let query, generation == searchGeneration else { return }
         query.disableUpdates()
         var urls: [URL] = []
         let count = min(query.resultCount, maxResults)
@@ -565,8 +569,62 @@ final class SpotlightSearcher {
         let callback = onResults
         if finished {
             query.stop()
+            if urls.isEmpty {
+                fallbackFileSearch(keyword: keyword, generation: generation, callback: callback)
+                return
+            }
         }
         callback?(urls)
+    }
+
+    private func fallbackFileSearch(keyword: String, generation: Int, callback: (([URL]) -> Void)?) {
+        let limit = maxResults
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let fileManager = FileManager.default
+            let home = fileManager.homeDirectoryForCurrentUser
+            let roots = [
+                home.appendingPathComponent("Desktop"),
+                home.appendingPathComponent("Documents"),
+                home.appendingPathComponent("Downloads"),
+                home.appendingPathComponent("projects"),
+                home.appendingPathComponent("Projects"),
+                URL(fileURLWithPath: "/Applications")
+            ]
+            let skipDirs: Set<String> = [".git", "node_modules", ".build", "build", "DerivedData", "__pycache__", ".venv", "venv"]
+            var matches: [URL] = []
+
+            func scan(_ directory: URL, depth: Int) {
+                guard matches.count < limit, depth <= 4 else { return }
+                guard let currentSelf = self, currentSelf.searchGeneration == generation else { return }
+                guard let urls = try? fileManager.contentsOfDirectory(
+                    at: directory,
+                    includingPropertiesForKeys: [.isDirectoryKey, .isPackageKey],
+                    options: [.skipsHiddenFiles]
+                ) else { return }
+
+                for url in urls {
+                    guard matches.count < limit else { return }
+                    let name = url.lastPathComponent
+                    if name.localizedCaseInsensitiveContains(keyword) {
+                        matches.append(url)
+                    }
+                    let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+                    if values?.isDirectory == true && values?.isPackage != true && !skipDirs.contains(name) {
+                        scan(url, depth: depth + 1)
+                    }
+                }
+            }
+
+            for root in roots where fileManager.fileExists(atPath: root.path) {
+                guard matches.count < limit else { break }
+                scan(root, depth: 0)
+            }
+
+            DispatchQueue.main.async {
+                guard let self, self.searchGeneration == generation else { return }
+                callback?(matches)
+            }
+        }
     }
 }
 
