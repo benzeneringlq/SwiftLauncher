@@ -314,6 +314,7 @@ class HotKeyManager: ObservableObject {
     private var hotKey: HotKey?
     private var hotKeyQwen: HotKey?
     private var launcherHotKey: HotKey?
+    private var clipboardHotKey: HotKey?
     private var volumeUpHotKey: HotKey?
     private var volumeDownHotKey: HotKey?
     private var alacrittyHotKey: HotKey?
@@ -357,6 +358,11 @@ class HotKeyManager: ObservableObject {
                 handleLauncherCommand(text)
             }
             launcherToast.show(mode: .input, message: "")
+        }
+        // ⌥ + V 呼出剪贴板历史
+        clipboardHotKey = HotKey(key: .v, modifiers: [.option])
+        clipboardHotKey?.keyDownHandler = {
+            launcherToast.show(mode: .input, message: "cb ")
         }
         alacrittyHotKey = HotKey(key: .return, modifiers: [.command])
         alacrittyHotKey?.keyDownHandler = {
@@ -505,6 +511,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeyManager = HotKeyManager()
         hotKeyManager?.setupHotKey()
         LauncherEnvironment.shared.preload()
+        ClipboardHistory.shared.startMonitoring()
         ipcServer = SwiftlauncherIPCServer { [weak self] text in
             self?.hotKeyManager?.translateReceivedText(text)
         }

@@ -2,15 +2,22 @@ import Foundation
 import Darwin
 import AppKit
 
+enum LauncherSuggestionAction {
+    case command
+    case openFile(URL)
+    case pasteClipboard(String)
+    case killProcess(NSRunningApplication)
+}
+
 struct LauncherSuggestion {
     let line: String        // full input after accepting the suggestion
     let replacement: String // completed token, used for display
-    let fileURL: URL?
+    let action: LauncherSuggestionAction
 
-    init(line: String, replacement: String, fileURL: URL? = nil) {
+    init(line: String, replacement: String, action: LauncherSuggestionAction = .command) {
         self.line = line
         self.replacement = replacement
-        self.fileURL = fileURL
+        self.action = action
     }
 }
 
@@ -560,5 +567,75 @@ final class SpotlightSearcher {
             query.stop()
         }
         callback?(urls)
+    }
+}
+
+// MARK: - In-Memory Clipboard History
+final class ClipboardHistory {
+    static let shared = ClipboardHistory()
+
+    private let maxItems = 50
+    private var entries: [String] = []
+    private var lastChangeCount: Int
+    private var timer: Timer?
+
+    private init() {
+        lastChangeCount = NSPasteboard.general.changeCount
+    }
+
+    var items: [String] {
+        poll()
+        return entries
+    }
+
+    func startMonitoring() {
+        guard timer == nil else { return }
+        poll()
+        let scheduled = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.poll()
+        }
+        scheduled.tolerance = 0.2
+        timer = scheduled
+    }
+
+    func poll() {
+        let pasteboard = NSPasteboard.general
+        let currentCount = pasteboard.changeCount
+        guard currentCount != lastChangeCount else { return }
+        lastChangeCount = currentCount
+
+        guard let text = pasteboard.string(forType: .string), !text.isEmpty else { return }
+        record(text)
+    }
+
+    func copyAndPaste(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        lastChangeCount = pasteboard.changeCount
+        record(text)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard AXIsProcessTrusted(),
+                  let source = CGEventSource(stateID: .hidSystemState),
+                  let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
+                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
+                return
+            }
+            keyDown.flags = .maskCommand
+            keyUp.flags = .maskCommand
+            keyDown.post(tap: .cghidEventTap)
+            keyUp.post(tap: .cghidEventTap)
+        }
+    }
+
+    private func record(_ text: String) {
+        if let existingIndex = entries.firstIndex(of: text) {
+            entries.remove(at: existingIndex)
+        }
+        entries.insert(text, at: 0)
+        if entries.count > maxItems {
+            entries.removeLast(entries.count - maxItems)
+        }
     }
 }

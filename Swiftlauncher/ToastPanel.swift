@@ -240,6 +240,9 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
             self.makeKeyAndOrderFront(nil)
             self.makeFirstResponder(inputField)
             focusCaretAtEnd()
+            if !message.isEmpty {
+                refreshCompletions()
+            }
         }
 
         setupGlobalClickMonitor()
@@ -310,25 +313,51 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
                     LauncherSuggestion(
                         line: " " + url.lastPathComponent,
                         replacement: "\(url.lastPathComponent) — \(url.deletingLastPathComponent().path)",
-                        fileURL: url
+                        action: .openFile(url)
                     )
                 }
-                self.applyCompletions(items, isSpotlight: true)
+                self.applyCompletions(items, showListForSingleItem: true, showGhost: false)
             }
+            return
+        }
+
+        if text == "cb" || text.hasPrefix("cb ") {
+            spotlightSearcher.cancel()
+            let keyword = text.hasPrefix("cb ") ? String(text.dropFirst(3)).trimmingCharacters(in: .whitespaces) : ""
+            let history = ClipboardHistory.shared.items
+            let filtered = keyword.isEmpty
+                ? history
+                : history.filter { $0.localizedCaseInsensitiveContains(keyword) }
+            let items = filtered.map { content in
+                let preview = content
+                    .replacingOccurrences(of: "\r\n", with: " ")
+                    .replacingOccurrences(of: "\n", with: " ")
+                    .replacingOccurrences(of: "\t", with: " ")
+                return LauncherSuggestion(
+                    line: text,
+                    replacement: preview,
+                    action: .pasteClipboard(content)
+                )
+            }
+            applyCompletions(items, showListForSingleItem: true, showGhost: false)
             return
         }
 
         spotlightSearcher.cancel()
         let items = LauncherCompleter.suggestions(for: text).filter { $0.line != text }
-        applyCompletions(items, isSpotlight: false)
+        applyCompletions(items)
     }
 
-    private func applyCompletions(_ items: [LauncherSuggestion], isSpotlight: Bool = false) {
+    private func applyCompletions(
+        _ items: [LauncherSuggestion],
+        showListForSingleItem: Bool = false,
+        showGhost: Bool = true
+    ) {
         completions = items
         let text = inputField.stringValue
 
         var ghost = ""
-        if !isSpotlight {
+        if showGhost {
             if items.count == 1 {
                 let candidate = items[0].line
                 if candidate.lowercased().hasPrefix(text.lowercased()), candidate.count > text.count {
@@ -348,7 +377,7 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
             updateGhostFrame()
         }
 
-        let shouldShowRows = isSpotlight ? !items.isEmpty : items.count > 1
+        let shouldShowRows = showListForSingleItem ? !items.isEmpty : items.count > 1
         if shouldShowRows {
             rebuildSuggestionRows(Array(items.prefix(maxVisibleRows)))
             suggestionsView.isHidden = false
@@ -433,8 +462,10 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
     private func selectedSpotlightURL() -> URL? {
         guard currentMode == .input, inputField.stringValue.hasPrefix(" ") else { return nil }
         let index = (completionIndex >= 0 && completionIndex < completions.count) ? completionIndex : 0
-        guard index < completions.count else { return nil }
-        return completions[index].fileURL
+        guard index < completions.count, case .openFile(let fileURL) = completions[index].action else {
+            return nil
+        }
+        return fileURL
     }
 
     @discardableResult
@@ -457,15 +488,31 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(insertNewline(_:)) {
-            if let fileURL = selectedSpotlightURL() {
-                let revealInFinder = NSApp.currentEvent?.modifierFlags.contains(.command) == true
-                hide()
-                if revealInFinder {
-                    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-                } else {
-                    NSWorkspace.shared.open(fileURL)
+            let selectedIndex = (completionIndex >= 0 && completionIndex < completions.count) ? completionIndex : 0
+            if selectedIndex < completions.count {
+                switch completions[selectedIndex].action {
+                case .openFile(let fileURL):
+                    let revealInFinder = NSApp.currentEvent?.modifierFlags.contains(.command) == true
+                    hide()
+                    if revealInFinder {
+                        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                    } else {
+                        NSWorkspace.shared.open(fileURL)
+                    }
+                    return true
+                case .pasteClipboard(let content):
+                    hide()
+                    ClipboardHistory.shared.copyAndPaste(content)
+                    return true
+                case .killProcess(let app):
+                    hide()
+                    if !app.forceTerminate() {
+                        Darwin.kill(app.processIdentifier, SIGKILL)
+                    }
+                    return true
+                case .command:
+                    break
                 }
-                return true
             }
 
             var text = inputField.stringValue
