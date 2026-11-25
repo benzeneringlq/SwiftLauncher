@@ -8,12 +8,16 @@
 
 ### 启动器（`⌥ Space`）
 
-- 基于登录 shell `PATH` 的行内命令补全。输入 `sio` 会出现 `sioyek`，回车即可运行。
+- 基于登录 shell `PATH` 的行内命令补全（预排序二分查找）。输入 `sio` 会出现 `sioyek`，回车即可运行。
 - 支持 `~`、相对路径和绝对路径补全，例如 `code ~/Doc` → `code ~/Documents/`。
+- **全盘文件搜索**：以空格开头输入（例如 ` report.pdf`）即可通过 `NSMetadataQuery` 检索文件；回车直接打开，`⌘ + Enter` 在访达中高亮定位。
+- **轻量剪贴板历史**：按 `⌥ V` 或输入 `cb [关键词]` 检索纯内存保留的最近 50 条文本记录；回车写回剪贴板并自动模拟 `⌘ V` 粘贴。
+- **进程点杀**：输入 `kill [关键词]` 模糊匹配当前运行进程（展示进程名与 `PID`），回车直接强制结束。
+- **访达上下文穿梭**：输入 `term` 或 `here` 读取当前最前台 Finder 窗口目录，直接在该路径打开新的 Alacritty 窗口。
 - `Tab` / `Shift+Tab` / `↑` / `↓` 切换候选，`Esc` 关闭面板。
 - 命令通过你的登录 shell 执行，因此真实的 `PATH`、alias 和函数都能生效。
-- 命令名匹配到 `.app` 时改走 LaunchServices（带 `-` 参数时仍交给 CLI）：保留正确的 Dock 图标，并激活已有实例，而不是启动一个马上退出的重复进程。
-- 启动器内可用 `l` / `r` / `u` / `d` / `f` 平铺当前活动窗口。
+- 命令名匹配到 `.app` 且无额外参数时，直接调用 `NSWorkspace.openApplication` 原生启动（绕过 shell）；带文件参数时走 `open -a`，带 `-` 参数时交给 CLI。
+- 启动器内可用 `l` / `r` / `u` / `d` / `f` 在当前窗口所在显示器上平铺该窗口。
 
 ### 翻译
 
@@ -29,10 +33,11 @@ API 凭据从 macOS Keychain 读取：
 | `YOUDAO_APP_SECRET` | 有道翻译 |
 | `DASHSCOPE_API_KEY` | DashScope / Qwen 翻译 |
 
-添加方式：`security add-generic-password -s <service> -a "$USER" -w '<value>'`。
+添加方式：`security add-generic-password -s <service> -a "$USER" -w '<value>'`（若缺少 Key，翻译浮层会直接输出可直接复制执行的 `security` 命令）。
 
 ### 其他快捷键
 
+- `⌥ V` — 呼出纯内存剪贴板历史（`cb `）。
 - `⌘ Return` — 打开 Alacritty。
 - `⌥ ↑` / `⌥ ↓` — 音量加 / 减。
 - 仅作为菜单栏应用运行，不显示 Dock 图标。
@@ -69,6 +74,15 @@ cd SwiftLauncher
 git submodule update --init --recursive
 ```
 
+### 构建脚本（`build.sh`）
+
+```sh
+./build.sh          # 编译 Swiftlauncher.app 与 swiftlauncher-cli，嵌入 CLI 并签名
+./build.sh cli      # 仅编译 swiftlauncher-cli
+./build.sh run      # 编译、嵌入签名并启动 Swiftlauncher.app
+./build.sh install  # 编译、嵌入签名并安装到 ~/Applications/
+```
+
 ### VS Code 任务
 
 - `Build Swiftlauncher (Release)` — 默认构建任务（`Cmd+Shift+B`）。
@@ -93,11 +107,11 @@ CLI 会被嵌入到 `Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli`；VS Co
 ## 实现简述
 
 - **菜单栏应用**：AppKit `NSStatusItem` + `.accessory` 激活策略，全局热键由 `HotKey` 包注册。
-- **启动器面板**：使用带 `.nonactivatingPanel` 样式的 `NSPanel`，可以在不激活应用的情况下成为 key window 并接收输入。`ToastPanel` 负责绘制行内灰色补全提示、候选列表，以及处理 `Tab` / 方向键 / `Enter` / `Esc`。
-- **补全**：启动时 `CommandLauncher.swift` 通过 `getpwuid` 找到用户的登录 shell，执行 `<shell> -l -c env` 读取真实 `PATH`，再扫描各目录中的可执行文件。输入会做基本的引号和转义解析：第一个词补全命令名，后续词补全文件路径，支持 `~` 展开和 shell 转义。
-- **执行**：命令交给登录 shell（`<shell> -l -c <command>`）。匹配到 app bundle 时用 `open -a` 交给 LaunchServices，由 macOS 负责激活和实例管理。命令退出码非 0 时，stderr 会以浮层显示。
+- **启动器面板**：使用带 `.nonactivatingPanel` 样式的 `NSPanel`，可以在不激活应用的情况下成为 key window 并接收输入。`ToastPanel` 预先创建并复用固定的 8 个候选行视图，全局鼠标点击监听仅在面板显示时按需挂载，并处理 `Tab` / 方向键 / `Enter` / `Esc`。
+- **补全与检索**：启动时 `CommandLauncher.swift` 读取登录 shell 的真实 `PATH` 并构建按小写排序的可执行文件索引，实现 $O(\log N)$ 前缀二分查找；路径补全通过 `contentsOfDirectory(at:includingPropertiesForKeys:options:)` 批量预取 `.isDirectoryKey`。前导空格输入路由至 `SpotlightSearcher`（`NSMetadataQuery`），`cb` 检索纯内存 `ClipboardHistory`（50 条环形缓冲），`kill` 检索 `NSWorkspace.shared.runningApplications`。
+- **执行**：无参 `.app` 直接调用 `NSWorkspace.shared.openApplication`；其余命令交给登录 shell（`<shell> -l -c <command>`）。命令退出码非 0 时，stderr 会以浮层显示。
 - **翻译**：有道 API（MD5 签名）和 DashScope 的 OpenAI 兼容接口，结果复用同一个浮层显示。
-- **窗口平铺**：通过辅助功能 API（`AXUIElement`）读取并调整前台应用的焦点窗口。
+- **窗口平铺**：通过辅助功能 API（`AXUIElement`）读取焦点窗口位置与尺寸，计算窗口中心所在屏幕的 `visibleFrame` 后进行多显示器自适应平铺。
 - **IPC**：`IPC.swift` 监听 Unix domain socket（`$SWIFTHOOK_SOCKET` 或按用户生成的临时路径），消息格式为 4 字节大端长度 + UTF-8 文本。
 
 ## 项目结构
@@ -105,11 +119,12 @@ CLI 会被嵌入到 `Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli`；VS Co
 ```
 Swiftlauncher/
 ├── Swiftlauncher/
-│   ├── SwiftlauncherApp.swift   # 应用入口、热键、翻译、窗口平铺
-│   ├── ToastPanel.swift         # 启动器/结果面板与补全 UI
-│   ├── CommandLauncher.swift    # 登录 shell 环境、补全、命令执行
+│   ├── SwiftlauncherApp.swift   # 应用入口、热键、翻译、窗口平铺、Finder 穿梭
+│   ├── ToastPanel.swift         # 启动器/结果面板、补全 UI 与输入路由
+│   ├── CommandLauncher.swift    # 环境、补全、执行、SpotlightSearcher、ClipboardHistory
 │   └── IPC.swift                # Unix socket 服务端
 ├── SwiftlauncherCLI.swift       # IPC 客户端（swiftlauncher-cli）
+├── build.sh                     # 命令行构建 / 运行 / 安装脚本
 ├── HotKey/                      # 全局热键包（submodule）
 └── .vscode/tasks.json           # 构建 / 运行 / 安装任务
 ```
