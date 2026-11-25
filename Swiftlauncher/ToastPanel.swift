@@ -36,6 +36,7 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
     private var currentMode: Mode = .result
 
     // MARK: - 补全状态
+    private let spotlightSearcher = SpotlightSearcher()
     private var completions: [LauncherSuggestion] = []
     private var completionBase: String?
     private var completionIndex = -1
@@ -104,8 +105,23 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
         label.drawsBackground = false
         containerView.addSubview(label)
 
-        // 补全候选列表
+        // 补全候选列表（预先实例化固定数量视图用于复用）
         suggestionsView.wantsLayer = true
+        for index in 0..<maxVisibleRows {
+            let row = NSTextField(labelWithString: "")
+            row.font = NSFont.systemFont(ofSize: 16, weight: .regular)
+            row.textColor = NSColor.white.withAlphaComponent(0.75)
+            row.lineBreakMode = .byTruncatingMiddle
+            row.isHidden = true
+            row.frame = NSRect(
+                x: 0,
+                y: CGFloat(index) * rowHeight + 4,
+                width: width - 40,
+                height: rowHeight - 4
+            )
+            suggestionsView.addSubview(row)
+            suggestionRows.append(row)
+        }
         containerView.addSubview(suggestionsView)
 
         // inputField(默认隐藏)
@@ -129,20 +145,16 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
         ghostLabel.lineBreakMode = .byTruncatingTail
         ghostLabel.isHidden = true
         containerView.addSubview(ghostLabel)
-
-        setupGlobalClickMonitor()
     }
 
     deinit {
-        if let monitor = globalClickMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalClickMonitor = nil
-        }
+        removeGlobalClickMonitor()
     }
 
-    // MARK: - 全局点击监控
+    // MARK: - 全局点击监控（按需挂载）
     private func setupGlobalClickMonitor() {
-        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+        guard globalClickMonitor == nil else { return }
+        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self = self else { return }
             let mouse = NSEvent.mouseLocation
             if !self.frame.contains(mouse) {
@@ -150,6 +162,13 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
                     self.hide()
                 }
             }
+        }
+    }
+
+    private func removeGlobalClickMonitor() {
+        if let monitor = globalClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalClickMonitor = nil
         }
     }
 
@@ -222,9 +241,12 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
             self.makeFirstResponder(inputField)
             focusCaretAtEnd()
         }
+
+        setupGlobalClickMonitor()
     }
 
     func hide() {
+        removeGlobalClickMonitor()
         self.orderOut(nil)
         if self.firstResponder is NSTextView {
             self.makeFirstResponder(nil)
@@ -253,6 +275,7 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
 
     // MARK: - 补全
     private func resetCompletionState() {
+        spotlightSearcher.cancel()
         completions = []
         completionBase = nil
         completionIndex = -1
@@ -267,27 +290,55 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
         completionBase = nil
         completionIndex = -1
         guard !text.isEmpty else {
+            spotlightSearcher.cancel()
             applyCompletions([])
             return
         }
+
+        if text.hasPrefix(" ") {
+            let keyword = String(text.dropFirst()).trimmingCharacters(in: .whitespaces)
+            guard !keyword.isEmpty else {
+                spotlightSearcher.cancel()
+                applyCompletions([])
+                return
+            }
+            spotlightSearcher.search(keyword: keyword) { [weak self] urls in
+                guard let self = self,
+                      self.currentMode == .input,
+                      self.inputField.stringValue.hasPrefix(" ") else { return }
+                let items = urls.map { url in
+                    LauncherSuggestion(
+                        line: " " + url.lastPathComponent,
+                        replacement: "\(url.lastPathComponent) — \(url.deletingLastPathComponent().path)",
+                        fileURL: url
+                    )
+                }
+                self.applyCompletions(items, isSpotlight: true)
+            }
+            return
+        }
+
+        spotlightSearcher.cancel()
         let items = LauncherCompleter.suggestions(for: text).filter { $0.line != text }
-        applyCompletions(items)
+        applyCompletions(items, isSpotlight: false)
     }
 
-    private func applyCompletions(_ items: [LauncherSuggestion]) {
+    private func applyCompletions(_ items: [LauncherSuggestion], isSpotlight: Bool = false) {
         completions = items
         let text = inputField.stringValue
 
         var ghost = ""
-        if items.count == 1 {
-            let candidate = items[0].line
-            if candidate.lowercased().hasPrefix(text.lowercased()), candidate.count > text.count {
-                ghost = String(candidate.dropFirst(text.count))
-            }
-        } else if items.count > 1 {
-            let prefix = LauncherCompleter.commonPrefix(items.map(\.line))
-            if prefix.lowercased().hasPrefix(text.lowercased()), prefix.count > text.count {
-                ghost = String(prefix.dropFirst(text.count))
+        if !isSpotlight {
+            if items.count == 1 {
+                let candidate = items[0].line
+                if candidate.lowercased().hasPrefix(text.lowercased()), candidate.count > text.count {
+                    ghost = String(candidate.dropFirst(text.count))
+                }
+            } else if items.count > 1 {
+                let prefix = LauncherCompleter.commonPrefix(items.map(\.line))
+                if prefix.lowercased().hasPrefix(text.lowercased()), prefix.count > text.count {
+                    ghost = String(prefix.dropFirst(text.count))
+                }
             }
         }
 
@@ -297,7 +348,8 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
             updateGhostFrame()
         }
 
-        if items.count > 1 {
+        let shouldShowRows = isSpotlight ? !items.isEmpty : items.count > 1
+        if shouldShowRows {
             rebuildSuggestionRows(Array(items.prefix(maxVisibleRows)))
             suggestionsView.isHidden = false
             setPanelHeight(inputHeight + CGFloat(min(items.count, maxVisibleRows)) * rowHeight)
@@ -310,39 +362,43 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
     }
 
     private func rebuildSuggestionRows(_ items: [LauncherSuggestion]) {
-        removeSuggestionRows()
+        let visibleCount = min(items.count, maxVisibleRows)
         suggestionsView.frame = NSRect(
             x: 20,
             y: 8,
             width: frame.width - 40,
-            height: CGFloat(items.count) * rowHeight
+            height: CGFloat(visibleCount) * rowHeight
         )
-        for (index, item) in items.enumerated() {
-            let row = NSTextField(labelWithString: "")
-            row.font = NSFont.systemFont(ofSize: 16, weight: .regular)
-            row.textColor = NSColor.white.withAlphaComponent(index == completionIndex ? 1.0 : 0.75)
-            row.lineBreakMode = .byTruncatingMiddle
-            row.stringValue = (index == completionIndex ? "› " : "   ") + item.replacement
-            row.frame = NSRect(
-                x: 0,
-                y: CGFloat(index) * rowHeight + 4,
-                width: frame.width - 40,
-                height: rowHeight - 4
-            )
-            suggestionsView.addSubview(row)
-            suggestionRows.append(row)
+        for (index, row) in suggestionRows.enumerated() {
+            if index < visibleCount {
+                let selected = index == completionIndex
+                row.textColor = NSColor.white.withAlphaComponent(selected ? 1.0 : 0.75)
+                row.stringValue = (selected ? "› " : "   ") + items[index].replacement
+                row.frame = NSRect(
+                    x: 0,
+                    y: CGFloat(index) * rowHeight + 4,
+                    width: frame.width - 40,
+                    height: rowHeight - 4
+                )
+                row.isHidden = false
+            } else {
+                row.isHidden = true
+                row.stringValue = ""
+            }
         }
     }
 
     private func removeSuggestionRows() {
         for row in suggestionRows {
-            row.removeFromSuperview()
+            row.isHidden = true
+            row.stringValue = ""
         }
-        suggestionRows = []
     }
 
     private func markSelectedRow() {
-        for (index, row) in suggestionRows.enumerated() {
+        let visibleCount = min(completions.count, suggestionRows.count)
+        for index in 0..<visibleCount {
+            let row = suggestionRows[index]
             let selected = index == completionIndex
             row.textColor = NSColor.white.withAlphaComponent(selected ? 1.0 : 0.75)
             row.stringValue = (selected ? "› " : "   ") + completions[index].replacement
@@ -374,6 +430,21 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
         editor.setSelectedRange(NSRange(location: (inputField.stringValue as NSString).length, length: 0))
     }
 
+    private func selectedSpotlightURL() -> URL? {
+        guard currentMode == .input, inputField.stringValue.hasPrefix(" ") else { return nil }
+        let index = (completionIndex >= 0 && completionIndex < completions.count) ? completionIndex : 0
+        guard index < completions.count else { return nil }
+        return completions[index].fileURL
+    }
+
+    @discardableResult
+    func handleCommandReturn() -> Bool {
+        guard isVisible, let fileURL = selectedSpotlightURL() else { return false }
+        hide()
+        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+        return true
+    }
+
     // MARK: - NSTextFieldDelegate
     func controlTextDidChange(_ obj: Notification) {
         guard currentMode == .input, !isApplyingCompletion else { return }
@@ -386,6 +457,17 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(insertNewline(_:)) {
+            if let fileURL = selectedSpotlightURL() {
+                let revealInFinder = NSApp.currentEvent?.modifierFlags.contains(.command) == true
+                hide()
+                if revealInFinder {
+                    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                } else {
+                    NSWorkspace.shared.open(fileURL)
+                }
+                return true
+            }
+
             var text = inputField.stringValue
             if completions.count == 1, !ghostLabel.isHidden {
                 text = completions[0].line

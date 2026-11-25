@@ -1,14 +1,27 @@
 import Foundation
 import Darwin
+import AppKit
 
 struct LauncherSuggestion {
     let line: String        // full input after accepting the suggestion
     let replacement: String // completed token, used for display
+    let fileURL: URL?
+
+    init(line: String, replacement: String, fileURL: URL? = nil) {
+        self.line = line
+        self.replacement = replacement
+        self.fileURL = fileURL
+    }
+}
+
+struct ExecutableEntry {
+    let original: String
+    let lower: String
 }
 
 struct LauncherEnvironmentData {
     let pathDirectories: [String]
-    let executables: [String]
+    let executables: [ExecutableEntry]
 }
 
 // MARK: - Login shell environment (GUI apps don't inherit the user's PATH)
@@ -39,10 +52,30 @@ final class LauncherEnvironment {
     }
 
     func commandNames(matching prefix: String) -> [String] {
-        let names = data.executables
-        guard !prefix.isEmpty else { return Array(names.prefix(300)) }
+        let entries = data.executables
+        guard !prefix.isEmpty else { return entries.prefix(200).map(\.original) }
         let lower = prefix.lowercased()
-        return names.filter { $0.lowercased().hasPrefix(lower) }
+
+        // 二分查找首个 lower >= prefix 的元素 (lower_bound)
+        var low = 0
+        var high = entries.count
+        while low < high {
+            let mid = low + (high - low) / 2
+            if entries[mid].lower < lower {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+
+        var results: [String] = []
+        results.reserveCapacity(min(200, entries.count - low))
+        var index = low
+        while index < entries.count && entries[index].lower.hasPrefix(lower) && results.count < 200 {
+            results.append(entries[index].original)
+            index += 1
+        }
+        return results
     }
 
     private static func detectShell() -> String {
@@ -103,7 +136,7 @@ final class LauncherEnvironment {
         return fallback
     }
 
-    private static func scanExecutables(in directories: [String]) -> [String] {
+    private static func scanExecutables(in directories: [String]) -> [ExecutableEntry] {
         let fileManager = FileManager.default
         var names = Set<String>()
         for directory in directories {
@@ -117,7 +150,12 @@ final class LauncherEnvironment {
                 names.insert(name)
             }
         }
-        return names.sorted()
+        return names
+            .map { ExecutableEntry(original: $0, lower: $0.lowercased()) }
+            .sorted {
+                if $0.lower != $1.lower { return $0.lower < $1.lower }
+                return $0.original < $1.original
+            }
     }
 }
 
@@ -229,7 +267,12 @@ enum LauncherCompleter {
             expandedDirectory = (home as NSString).appendingPathComponent(dirPart)
         }
 
-        guard let names = try? fileManager.contentsOfDirectory(atPath: expandedDirectory) else { return [] }
+        let directoryURL = URL(fileURLWithPath: expandedDirectory, isDirectory: true)
+        guard let urls = try? fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsPackageDescendants]
+        ) else { return [] }
 
         struct Entry {
             let name: String
@@ -239,13 +282,12 @@ enum LauncherCompleter {
         let showHidden = namePrefix.hasPrefix(".")
         let lowerPrefix = namePrefix.lowercased()
         var entries: [Entry] = []
-        for name in names {
+        for itemURL in urls {
+            let name = itemURL.lastPathComponent
             if !showHidden && name.hasPrefix(".") { continue }
             guard name.lowercased().hasPrefix(lowerPrefix) else { continue }
-            var isDirectory: ObjCBool = false
-            let fullPath = (expandedDirectory as NSString).appendingPathComponent(name)
-            guard fileManager.fileExists(atPath: fullPath, isDirectory: &isDirectory) else { continue }
-            entries.append(Entry(name: name, isDirectory: isDirectory.boolValue))
+            let isDirectory = (try? itemURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            entries.append(Entry(name: name, isDirectory: isDirectory))
         }
 
         entries.sort { lhs, rhs in
@@ -311,9 +353,13 @@ enum LauncherRunner {
         if let parts = firstWord(of: trimmed),
            let app = appBundle(named: parts.word),
            !parts.rest.split(whereSeparator: { $0 == " " || $0 == "\t" }).contains(where: { $0.hasPrefix("-") }) {
-            let openCommand = parts.rest.isEmpty
-                ? "open -a \(shellQuote(app.path))"
-                : "open -a \(shellQuote(app.path)) \(parts.rest)"
+            if parts.rest.isEmpty {
+                let config = NSWorkspace.OpenConfiguration()
+                config.activates = true
+                NSWorkspace.shared.openApplication(at: app, configuration: config, completionHandler: nil)
+                return
+            }
+            let openCommand = "open -a \(shellQuote(app.path)) \(parts.rest)"
             launch(
                 executable: environment.shellPath,
                 arguments: ["-l", "-c", openCommand],
@@ -434,5 +480,85 @@ private final class ErrorCollector {
         lock.lock()
         defer { lock.unlock() }
         return String(data: buffer, encoding: .utf8) ?? ""
+    }
+}
+
+// MARK: - Spotlight File Search (NSMetadataQuery)
+final class SpotlightSearcher {
+    private var query: NSMetadataQuery?
+    private var observers: [NSObjectProtocol] = []
+    private var onResults: (([URL]) -> Void)?
+    private let maxResults = 30
+
+    deinit {
+        cancel()
+    }
+
+    func search(keyword: String, onResults: @escaping ([URL]) -> Void) {
+        cancel()
+
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            onResults([])
+            return
+        }
+
+        self.onResults = onResults
+
+        let metadataQuery = NSMetadataQuery()
+        metadataQuery.searchScopes = [NSMetadataQueryLocalComputerScope]
+        metadataQuery.predicate = NSPredicate(format: "kMDItemFSName LIKE[cd] %@", "*\(trimmed)*")
+
+        let center = NotificationCenter.default
+        let finishObserver = center.addObserver(
+            forName: .NSMetadataQueryDidFinishGathering,
+            object: metadataQuery,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleQueryUpdate(finished: true)
+        }
+        let updateObserver = center.addObserver(
+            forName: .NSMetadataQueryDidUpdate,
+            object: metadataQuery,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleQueryUpdate(finished: false)
+        }
+
+        observers = [finishObserver, updateObserver]
+        query = metadataQuery
+        metadataQuery.start()
+    }
+
+    func cancel() {
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        observers.removeAll()
+        query?.stop()
+        query = nil
+        onResults = nil
+    }
+
+    private func handleQueryUpdate(finished: Bool) {
+        guard let query else { return }
+        query.disableUpdates()
+        var urls: [URL] = []
+        let count = min(query.resultCount, maxResults)
+        urls.reserveCapacity(count)
+        for index in 0..<count {
+            guard let item = query.result(at: index) as? NSMetadataItem,
+                  let path = item.value(forAttribute: NSMetadataItemPathKey) as? String else {
+                continue
+            }
+            urls.append(URL(fileURLWithPath: path))
+        }
+        query.enableUpdates()
+
+        let callback = onResults
+        if finished {
+            query.stop()
+        }
+        callback?(urls)
     }
 }

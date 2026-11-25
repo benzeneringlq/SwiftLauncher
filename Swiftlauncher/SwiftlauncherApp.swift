@@ -160,10 +160,55 @@ func moveActiveWindow(direction: String) {
     AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowRef)
     
     guard let window = windowRef else { return }
-    
-    // 获取屏幕尺寸
-    guard let screen = NSScreen.main else { return }
-    let screenFrame = screen.visibleFrame
+    let axWindow = window as! AXUIElement
+
+    // 从 Accessibility API 读取窗口当前位置与尺寸，计算窗口中心点所在的屏幕
+    var posRef: CFTypeRef?
+    var sizeRefCurrent: CFTypeRef?
+    var currentPosition = CGPoint.zero
+    var currentSize = CGSize.zero
+    let hasPosition = AXUIElementCopyAttributeValue(axWindow, kAXPositionAttribute as CFString, &posRef) == .success
+        && posRef != nil
+        && AXValueGetValue(posRef as! AXValue, .cgPoint, &currentPosition)
+    let hasSize = AXUIElementCopyAttributeValue(axWindow, kAXSizeAttribute as CFString, &sizeRefCurrent) == .success
+        && sizeRefCurrent != nil
+        && AXValueGetValue(sizeRefCurrent as! AXValue, .cgSize, &currentSize)
+
+    let primaryHeight = NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
+    let targetScreen: NSScreen?
+    if hasPosition && hasSize {
+        let axCenter = CGPoint(
+            x: currentPosition.x + currentSize.width / 2,
+            y: currentPosition.y + currentSize.height / 2
+        )
+        let cocoaCenter = CGPoint(x: axCenter.x, y: primaryHeight - axCenter.y)
+        if let matched = NSScreen.screens.first(where: { $0.frame.contains(cocoaCenter) }) {
+            targetScreen = matched
+        } else {
+            let cocoaRect = CGRect(
+                x: currentPosition.x,
+                y: primaryHeight - (currentPosition.y + currentSize.height),
+                width: currentSize.width,
+                height: currentSize.height
+            )
+            targetScreen = NSScreen.screens.max(by: {
+                let lhsArea = $0.frame.intersection(cocoaRect)
+                let rhsArea = $1.frame.intersection(cocoaRect)
+                return (lhsArea.width * lhsArea.height) < (rhsArea.width * rhsArea.height)
+            })
+        }
+    } else {
+        targetScreen = NSScreen.main ?? NSScreen.screens.first
+    }
+
+    guard let screen = targetScreen else { return }
+    let visibleFrame = screen.visibleFrame
+    let screenFrame = CGRect(
+        x: visibleFrame.origin.x,
+        y: primaryHeight - visibleFrame.maxY,
+        width: visibleFrame.width,
+        height: visibleFrame.height
+    )
     
 // 直接初始化为全屏状态
 var newFrame = screenFrame
@@ -311,6 +356,9 @@ class HotKeyManager: ObservableObject {
         }
         alacrittyHotKey = HotKey(key: .return, modifiers: [.command])
         alacrittyHotKey?.keyDownHandler = {
+            if launcherToast.handleCommandReturn() {
+                return
+            }
             print("Command + Enter triggered: Opening Alacritty")
             
             // 优先尝试通过路径直接打开，因为你已经确认了路径
