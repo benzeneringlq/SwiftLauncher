@@ -298,17 +298,20 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
             return
         }
 
-        if text.hasPrefix(" ") {
-            let keyword = String(text.dropFirst()).trimmingCharacters(in: .whitespaces)
+        if text.hasPrefix(" ") || text.hasPrefix("\u{00A0}") {
+            let keyword = String(text.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !keyword.isEmpty else {
                 spotlightSearcher.cancel()
-                applyCompletions([])
+                applyCompletions([], showGhost: false)
+                ghostLabel.stringValue = "Spotlight 文件搜索..."
+                ghostLabel.isHidden = false
+                updateGhostFrame()
                 return
             }
             spotlightSearcher.search(keyword: keyword) { [weak self] urls in
                 guard let self = self,
                       self.currentMode == .input,
-                      self.inputField.stringValue.hasPrefix(" ") else { return }
+                      self.inputField.stringValue.hasPrefix(" ") || self.inputField.stringValue.hasPrefix("\u{00A0}") else { return }
                 let items = urls.map { url in
                     LauncherSuggestion(
                         line: " " + url.lastPathComponent,
@@ -492,7 +495,8 @@ class ToastPanel: NSPanel, NSTextFieldDelegate {
     }
 
     private func selectedSpotlightURL() -> URL? {
-        guard currentMode == .input, inputField.stringValue.hasPrefix(" ") else { return nil }
+        let text = inputField.stringValue
+        guard currentMode == .input, text.hasPrefix(" ") || text.hasPrefix("\u{00A0}") else { return nil }
         let index = (completionIndex >= 0 && completionIndex < completions.count) ? completionIndex : 0
         guard index < completions.count, case .openFile(let fileURL) = completions[index].action else {
             return nil
