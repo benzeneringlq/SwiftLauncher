@@ -4,17 +4,8 @@
         {
             "label": "Build Swiftlauncher (Release)",
             "type": "shell",
-            "command": "xcodebuild",
+            "command": "./build.sh",
             "args": [
-                "-project",
-                "Swiftlauncher.xcodeproj",
-                "-scheme",
-                "Swiftlauncher",
-                "-configuration",
-                "Release",
-                "-derivedDataPath",
-                "build",
-                "CODE_SIGNING_ALLOWED=NO",
                 "build"
             ],
             "group": {
@@ -27,43 +18,26 @@
                 "panel": "shared"
             },
             "problemMatcher": [
-                "$msCompile"
+                "$swiftc"
             ]
         },
         {
             "label": "Build swiftlauncher-cli",
             "type": "shell",
-            "command": "/bin/sh",
+            "command": "./build.sh",
             "args": [
-                "-c",
-                "mkdir -p build/Build/Products/Release && swiftc -O SwiftlauncherCLI.swift -o build/Build/Products/Release/swiftlauncher-cli"
+                "cli"
             ],
-            "problemMatcher": ["$swiftc"]
+            "problemMatcher": [
+                "$swiftc"
+            ]
         },
         {
             "label": "Run Swiftlauncher (Release)",
             "type": "shell",
-            "dependsOn": "Install swiftlauncher-cli into app",
-            "command": "open",
+            "command": "./build.sh",
             "args": [
-                "build/Build/Products/Release/Swiftlauncher.app"
-            ],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "panel": "shared"
-            }
-        },
-        {
-            "label": "Install Swiftlauncher to ~/Applications",
-            "type": "shell",
-            "dependsOn": "Install swiftlauncher-cli into app",
-            "command": "cp",
-            "args": [
-                "-R",
-                "-f",
-                "build/Build/Products/Release/Swiftlauncher.app",
-                "${env:HOME}/Applications/"
+                "run"
             ],
             "presentation": {
                 "echo": true,
@@ -73,15 +47,17 @@
             "problemMatcher": []
         },
         {
-            "label": "Install swiftlauncher-cli into app",
+            "label": "Install Swiftlauncher to ~/Applications",
             "type": "shell",
-            "dependsOn": ["Build Swiftlauncher (Release)", "Build swiftlauncher-cli"],
-            "dependsOrder": "sequence",
-            "command": "/bin/sh",
+            "command": "./build.sh",
             "args": [
-                "-c",
-                "cp build/Build/Products/Release/swiftlauncher-cli build/Build/Products/Release/Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli && IDENTITY=$(security find-identity -v -p codesigning | awk '/Swiftlauncher Local Signing/ && length($2)==40 {print $2; exit}') && { [ -n \"$IDENTITY\" ] || IDENTITY=$(security find-identity -v -p codesigning | awk 'length($2)==40 {print $2; exit}'); } && SIGN_ID=${IDENTITY:--} && codesign --force --sign \"$SIGN_ID\" build/Build/Products/Release/Swiftlauncher.app/Contents/MacOS/swiftlauncher-cli && codesign --force --sign \"$SIGN_ID\" build/Build/Products/Release/Swiftlauncher.app"
+                "install"
             ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "panel": "shared"
+            },
             "problemMatcher": []
         }
     ]
