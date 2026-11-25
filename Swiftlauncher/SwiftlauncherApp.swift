@@ -55,7 +55,11 @@ func getSelectedText() -> String? {
 
 // MARK: - DashScope Chat Completion (Swift Version)
 func dashscopeChatCompletion(userText: String, completion: @escaping (String) -> Void) {
-    
+    guard !apiKey.isEmpty else {
+        completion("缺Key! 终端运行:\nsecurity add-generic-password -s DASHSCOPE_API_KEY -a $USER -w <YOUR_KEY>")
+        return
+    }
+
     let url = URL(string: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")!
     
     let body: [String: Any] = [
@@ -417,7 +421,14 @@ class HotKeyManager: ObservableObject {
     // MARK: - 翻译
     private func translate(text: String, from: String = "auto", to: String = "zh-CHS", completion: @escaping (String) -> Void) {
         guard !appKey.isEmpty && !appSecret.isEmpty else {
-            completion("Missing YOUDAO_APP_KEY or YOUDAO_APP_SECRET")
+            var lines = ["缺Key! 终端运行:"]
+            if appKey.isEmpty {
+                lines.append("security add-generic-password -s YOUDAO_APP_KEY -a $USER -w <YOUR_KEY>")
+            }
+            if appSecret.isEmpty {
+                lines.append("security add-generic-password -s YOUDAO_APP_SECRET -a $USER -w <YOUR_SECRET>")
+            }
+            completion(lines.joined(separator: "\n"))
             return
         }
         
